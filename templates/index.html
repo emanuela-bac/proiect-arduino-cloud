@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control Arduino</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 650px;
+            margin: 50px auto;
+            text-align: center;
+            background-color: #f0f0f0;
+        }
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            margin: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .temperatura { font-size: 48px; color: #e74c3c; font-weight: bold; }
+        .btn { padding: 15px 40px; font-size: 18px; border: none; border-radius: 8px; cursor: pointer; margin: 10px; }
+        .btn-on      { background-color: #2ecc71; color: white; }
+        .btn-off     { background-color: #e74c3c; color: white; }
+        .btn-trimite { background-color: #3498db; color: white; }
+        .btn-sterge  { background-color: #e74c3c; color: white; padding: 5px 12px; font-size: 14px; border: none; border-radius: 5px; cursor: pointer; }
+        .status { font-size: 20px; margin: 15px; font-weight: bold; }
+        input[type="text"] {
+            width: 70%; padding: 10px; font-size: 16px;
+            border: 1px solid #ccc; border-radius: 8px; margin: 10px;
+        }
+        .mesaj-ok { color: green; font-weight: bold; display: none; }
+        .eveniment-item {
+            display: flex; justify-content: space-between;
+            align-items: center; padding: 10px;
+            border-bottom: 1px solid #eee; text-align: left;
+        }
+        .eveniment-item:last-child { border-bottom: none; }
+        .alert-badge {
+            background: #e74c3c; color: white;
+            padding: 3px 8px; border-radius: 10px; font-size: 12px;
+        }
+        #no-evenimente { color: #888; font-style: italic; }
+    </style>
+</head>
+<body>
+    <h1>🎛️ Control Arduino</h1>
+
+    <!-- Temperatura -->
+    <div class="card">
+        <h2>🌡️ Temperatura</h2>
+        <div class="temperatura" id="temp">--.-</div>
+        <p>°C</p>
+    </div>
+
+    <!-- Control LED -->
+    <div class="card">
+        <h2>💡 Control LED</h2>
+        <div class="status" id="led-status">Status: --</div>
+        <button class="btn btn-on"  onclick="controlLED('ON')">Aprinde</button>
+        <button class="btn btn-off" onclick="controlLED('OFF')">Stinge</button>
+    </div>
+
+    <!-- Trimitere mesaj -->
+    <div class="card">
+        <h2>✉️ Trimite Mesaj</h2>
+        <input type="text" id="mesaj-input" placeholder="Scrie un mesaj..." maxlength="31"/>
+        <br>
+        <button class="btn btn-trimite" onclick="trimiteMessaj()">Trimite</button>
+        <p class="mesaj-ok" id="mesaj-ok">✅ Mesaj trimis și salvat în EEPROM!</p>
+    </div>
+
+    <!-- Evenimente inundatie -->
+    <div class="card">
+        <h2>🌊 Evenimente Inundație</h2>
+        <div id="evenimente-lista">
+            <p id="no-evenimente">Niciun eveniment înregistrat.</p>
+        </div>
+    </div>
+
+    <script>
+        function updateTemperatura() {
+            fetch('/temperatura')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('temp').innerText = data.temperatura.toFixed(1);
+                });
+        }
+
+        function updateLED() {
+            fetch('/led_status')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('led-status').innerText =
+                        'Status: ' + (data.led ? '🟢 APRINS' : '🔴 STINS');
+                });
+        }
+
+        function controlLED(comanda) {
+            fetch('/led', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({comanda: comanda})
+            }).then(() => updateLED());
+        }
+
+        function trimiteMessaj() {
+            const mesaj = document.getElementById('mesaj-input').value.trim();
+            if(mesaj === '') { alert('Scrie un mesaj înainte să trimiți!'); return; }
+            fetch('/mesaj', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({mesaj: mesaj})
+            }).then(() => {
+                document.getElementById('mesaj-ok').style.display = 'block';
+                document.getElementById('mesaj-input').value = '';
+                setTimeout(() => {
+                    document.getElementById('mesaj-ok').style.display = 'none';
+                }, 3000);
+            });
+        }
+
+        function updateEvenimente() {
+            fetch('/evenimente')
+                .then(r => r.json())
+                .then(data => {
+                    const lista = document.getElementById('evenimente-lista');
+                    const noEv = document.getElementById('no-evenimente');
+                    if(data.evenimente.length === 0) {
+                        lista.innerHTML = '<p id="no-evenimente">Niciun eveniment înregistrat.</p>';
+                        return;
+                    }
+                    lista.innerHTML = data.evenimente.map(e => `
+                        <div class="eveniment-item">
+                            <span>
+                                <span class="alert-badge">🚨 ALERTĂ</span>
+                                &nbsp; ${e.timestamp} — ${e.mesaj}
+                            </span>
+                            <button class="btn-sterge" onclick="stergeEveniment(${e.id})">🗑️ Șterge</button>
+                        </div>
+                    `).join('');
+                });
+        }
+
+        function stergeEveniment(id) {
+            fetch('/evenimente/' + id, { method: 'DELETE' })
+                .then(() => updateEvenimente());
+        }
+
+        setInterval(updateTemperatura, 2000);
+        setInterval(updateLED, 2000);
+        setInterval(updateEvenimente, 3000);
+        updateTemperatura();
+        updateLED();
+        updateEvenimente();
+    </script>
+</body>
+</html>
