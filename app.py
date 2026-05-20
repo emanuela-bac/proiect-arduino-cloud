@@ -11,14 +11,17 @@ app = Flask(__name__)
 SERIAL_PORT = 'COM8'
 BAUD_RATE = 9600
 
-# Setări email — completează cu datele tale!
+# Setări email
 EMAIL_SENDER   = 'emanuelabacos@gmail.com'
 EMAIL_PASSWORD = 'pdpy hhpv hsxq epdh'
 EMAIL_RECEIVER = 'emabacos@gmail.com'
 
 temperatura_curenta = 0.0
 led_status = False
-evenimente = []  # lista evenimente inundatie
+evenimente = []
+ora_curenta = '--:--:--'
+orar_pornire = ''
+orar_oprire  = ''
 ser = None
 email_lock = threading.Lock()
 
@@ -46,26 +49,27 @@ def trimite_email(mesaj):
         print(f"Eroare email: {e}")
 
 def citire_serial():
-    global temperatura_curenta, evenimente
+    global temperatura_curenta, evenimente, ora_curenta
     while True:
         try:
             if ser and ser.in_waiting:
                 linie = ser.readline().decode('utf-8').strip()
-                if 'Temperatura:' in linie:
-                    temp = linie.replace('Temperatura:', '').replace('°C', '').strip()
+                if 'Temperatura:' in linie and 'Ora:' in linie:
+                    # Format: "Temperatura: 25.3 °C | Ora: 14:30:00"
+                    parti = linie.split('|')
+                    temp = parti[0].replace('Temperatura:', '').replace('°C', '').strip()
                     temperatura_curenta = float(temp)
+                    ora_curenta = parti[1].replace('Ora:', '').strip()
                 elif 'INUNDATIE DETECTATA' in linie:
                     timestamp = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
                     eveniment = {
-                        'id': len(evenimente),
+                        'id': int(time.time()),
                         'timestamp': timestamp,
                         'mesaj': 'Inundație detectată'
                     }
                     evenimente.insert(0, eveniment)
-                    # Păstrează doar ultimele 10
                     if len(evenimente) > 10:
                         evenimente = evenimente[:10]
-                    # Trimite email în thread separat
                     t = threading.Thread(
                         target=trimite_email,
                         args=(f"ALERTĂ INUNDAȚIE!\nDetectată la: {timestamp}",)
@@ -81,7 +85,7 @@ def index():
 
 @app.route('/temperatura')
 def get_temperatura():
-    return jsonify({'temperatura': temperatura_curenta})
+    return jsonify({'temperatura': temperatura_curenta, 'ora': ora_curenta})
 
 @app.route('/led', methods=['POST'])
 def control_led():
@@ -109,6 +113,24 @@ def trimite_mesaj():
         ser.write((mesaj + '\n').encode('utf-8'))
         time.sleep(0.5)
     return jsonify({'status': 'ok'})
+
+@app.route('/orar', methods=['POST'])
+def seteaza_orar():
+    global orar_pornire, orar_oprire
+    data = request.json
+    pornire = data.get('pornire', '')
+    oprire  = data.get('oprire', '')
+    if pornire and oprire and ser:
+        orar_pornire = pornire
+        orar_oprire  = oprire
+        comanda = f"ORAR:{pornire}-{oprire}\n"
+        ser.write(comanda.encode('utf-8'))
+        time.sleep(0.5)
+    return jsonify({'status': 'ok', 'pornire': orar_pornire, 'oprire': orar_oprire})
+
+@app.route('/orar', methods=['GET'])
+def get_orar():
+    return jsonify({'pornire': orar_pornire, 'oprire': orar_oprire})
 
 @app.route('/evenimente')
 def get_evenimente():
