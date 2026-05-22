@@ -5,6 +5,8 @@ import time
 import smtplib
 from email.mime.text import MIMEText
 from datetime import datetime
+from dotenv import load_dotenv
+import os
 
 app = Flask(__name__)
 
@@ -12,9 +14,11 @@ SERIAL_PORT = 'COM8'
 BAUD_RATE = 9600
 
 # Setări email
-EMAIL_SENDER   = 'emanuelabacos@gmail.com'
-EMAIL_PASSWORD = 'pdpy hhpv hsxq epdh'
-EMAIL_RECEIVER = 'emabacos@gmail.com'
+load_dotenv()
+
+EMAIL_SENDER   = os.getenv('EMAIL_SENDER')
+EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD')
+EMAIL_RECEIVER = os.getenv('EMAIL_RECEIVER')
 
 temperatura_curenta = 0.0
 led_status = False
